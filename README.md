@@ -1,6 +1,7 @@
 ﻿# InterviewIQ
 
-LIVE URL: 
+LIVE URL: aivirtualinterview.vercel.app
+
 AI assisted virtual interview practice with a React/Vite client and a Python FastAPI server.
 
 ## Features
