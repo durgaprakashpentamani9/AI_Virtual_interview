@@ -20,7 +20,20 @@ if settings.SEED_SAMPLE_DATA:
     seed()
 pwd=CryptContext(schemes=['bcrypt'],deprecated='auto'); oauth=OAuth2PasswordBearer(tokenUrl='/api/auth/login')
 app=FastAPI(title='InterviewIQ API',version='1.0.0')
-app.add_middleware(CORSMiddleware,allow_origins=[settings.CLIENT_URL],allow_credentials=True,allow_methods=['*'],allow_headers=['*'])
+cors_origins = [settings.CLIENT_URL] if settings.CLIENT_URL else []
+for dev_origin in ('http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000'):
+    if dev_origin not in cors_origins:
+        cors_origins.append(dev_origin)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_origin_regex=r"^https://.*\.vercel\.app$",
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*']
+)
+UPLOAD_DIR = Path('/tmp/uploads') if os.environ.get('VERCEL') else (Path(__file__).resolve().parents[2] / 'uploads')
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 bank=json.loads((Path(__file__).parent/'data/question_bank.json').read_text(encoding='utf-8'))
 def err(code,msg): raise HTTPException(code,detail={'message':msg})
 def token_for(user): return jwt.encode({'sub':str(user.id),'exp':datetime.now(timezone.utc)+timedelta(minutes=settings.JWT_EXPIRES_MINUTES)},settings.JWT_SECRET,algorithm='HS256')
@@ -129,7 +142,7 @@ async def upload(file:UploadFile=File(...),u=Depends(current_user),db:Session=De
     if ext not in {'pdf','docx','txt'}: err(415,'Upload a PDF, DOCX, or TXT resume')
     try: text,profile=await parse_resume(data,ext)
     except Exception: err(422,'Could not extract text from this resume')
-    path=Path(__file__).resolve().parents[2]/'uploads'; path.mkdir(exist_ok=True); stored=f'{secrets.token_hex(8)}.{ext}'; (path/stored).write_bytes(data)
+    stored=f'{secrets.token_hex(8)}.{ext}'; (UPLOAD_DIR/stored).write_bytes(data)
     r=Repository(db).create(Resume,{'user_id':u.id,'original_name':file.filename or stored,'stored_name':stored,'mime_type':file.content_type or 'application/octet-stream','size':len(data),'file_type':ext,'extracted_text':text,'profile':profile,'status':'ready'})
     return {'id':r.id,'original_name':r.original_name,'status':r.status,'profile':profile}
 @app.get('/api/resumes/{rid}')
@@ -137,7 +150,7 @@ def get_resume(rid:int,u=Depends(current_user),db:Session=Depends(get_db)):
     r=own(Resume,rid,u,db); return {'id':r.id,'original_name':r.original_name,'status':r.status,'profile':r.profile,'extracted_text':r.extracted_text}
 @app.post('/api/resumes/{rid}/reprocess')
 async def reprocess(rid:int,u=Depends(current_user),db:Session=Depends(get_db)):
-    r=own(Resume,rid,u,db); path=Path(__file__).resolve().parents[2]/'uploads'/r.stored_name
+    r=own(Resume,rid,u,db); path=UPLOAD_DIR/r.stored_name
     try: text,profile=await parse_resume(path.read_bytes(),r.file_type); r.extracted_text=text;r.profile=profile;r.status='ready';db.commit()
     except Exception: err(422,'Resume reprocessing failed')
     return {'id':r.id,'status':r.status,'profile':r.profile}
