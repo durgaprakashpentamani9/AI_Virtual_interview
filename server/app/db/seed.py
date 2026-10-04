@@ -1,0 +1,18 @@
+from app.db.session import SessionLocal
+from app.repositories.repository import Repository
+from app.models.models import User,Resume,InterviewSession,InterviewQuestion,InterviewAnswer,InterviewReport
+from passlib.context import CryptContext
+pwd=CryptContext(schemes=['bcrypt'],deprecated='auto')
+def seed():
+    db=SessionLocal();repo=Repository(db)
+    try:
+        if repo.get_one(User,{'email':'demo@interviewiq.ai'}): return
+        u=repo.create(User,{'name':'InterviewIQ Demo','email':'demo@interviewiq.ai','password_hash':pwd.hash('Password@123'),'target_role':'Software Engineer'})
+        resume=repo.create(Resume,{'user_id':u.id,'original_name':'Demo Software Engineer Resume.txt','stored_name':'demo-resume.txt','mime_type':'text/plain','size':311,'file_type':'txt','status':'ready','extracted_text':'Software engineer with experience in Python, React, FastAPI, SQL, and building reliable web applications. Built an analytics dashboard and an API service.','profile':{'skills':['python','react','fastapi','sql'],'projects':['Analytics dashboard','API service'],'education':['Computer Science'],'experience':['Software Engineer'],'summary':'Software engineer focused on Python and web applications.'}})
+        for index,score in enumerate((7.4,8.2),1):
+            s=repo.create(InterviewSession,{'user_id':u.id,'resume_id':resume.id,'role':'Software Engineer','type':'mixed','difficulty':'medium','mode':'text','total_questions':5,'current_index':5,'status':'completed','plan':{'categories':['technical','behavioral']},'trace':[{'stage':n,'status':'completed','note':'Demo session'} for n in ['Planner','Resume Analyzer','Question Generator','Answer Evaluator','Speech Analyzer','Report Writer']]})
+            for qi in range(5):
+                q=repo.create(InterviewQuestion,{'session_id':s.id,'order_index':qi,'text':['How do you design a reliable API?','Tell me about a project you are proud of.','How do you debug a performance issue?','How do you handle conflicting priorities?','What would you improve in your recent project?'][qi],'category':'technical' if qi%2==0 else 'behavioral','difficulty':'medium','expected_keywords':['design','testing','result'],'ideal_answer':'Explain context, your approach, key trade-offs, and the measurable outcome.'})
+                repo.create(InterviewAnswer,{'session_id':s.id,'question_id':q.id,'transcript':'I start by clarifying requirements, measuring the current behavior, and choosing a small change. I test the result and monitor it after release.','input_mode':'text','duration_sec':48,'content_scores':{'relevance':score,'clarity':score,'depth':score-0.5,'communication':score,'overall':score},'speech_metrics':{'words_per_minute':128,'filler_count':1,'filler_words':['like'],'pause_count':2,'longest_pause_sec':1.2},'video_metrics':{},'feedback':{'scores':{'overall':score},'feedback':'Clear, structured answer. Add an example with a result.','strengths':['Structured reasoning'],'improvements':['Add measurable outcomes'],'ideal_answer_hint':'Context, approach, and result.','needs_follow_up':False}})
+            repo.create(InterviewReport,{'session_id':s.id,'overall_score':score,'category_scores':{'relevance':score,'clarity':score,'depth':score-0.5,'communication':score},'speech_summary':{'average_wpm':128,'filler_count':5,'pause_count':10},'video_summary':{},'strengths':['Structured thinking','Clear communication'],'weaknesses':['Use more measurable outcomes'],'suggestions':['Use the STAR format for behavioral questions.'],'summary':f'Demo interview score: {score}/10. Answers showed clear structure.','verdict':'good','trace':s.trace})
+    finally: db.close()
